@@ -1,0 +1,6 @@
+{
+  "name": "MailBox",
+  "description": "Instant private temporary email with live inbox sync, animated glass UI, and zero-CORS backend proxy.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
