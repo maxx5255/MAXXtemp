@@ -78,15 +78,54 @@ async function requestJson<T>(
   }
 }
 
+let cachedDomainsEntry: {
+  providerKey: string;
+  data: { provider: MailProvider; domains: MailDomain[] };
+  expiresAt: number;
+} | null = null;
+const inflightDomainRequests = new Map<
+  string,
+  Promise<{ provider: MailProvider; domains: MailDomain[] }>
+>();
+
 export async function fetchAvailableDomains(
   provider?: MailProvider,
   signal?: AbortSignal,
 ): Promise<{ provider: MailProvider; domains: MailDomain[] }> {
+  const key = provider ?? 'auto';
+  const now = Date.now();
+  if (
+    cachedDomainsEntry &&
+    cachedDomainsEntry.providerKey === key &&
+    cachedDomainsEntry.expiresAt > now
+  ) {
+    return cachedDomainsEntry.data;
+  }
+
+  const existing = inflightDomainRequests.get(key);
+  if (existing) {
+    return existing;
+  }
+
   const qs = provider ? `?provider=${encodeURIComponent(provider)}` : '';
-  return requestJson<{ provider: MailProvider; domains: MailDomain[] }>(
+  const reqPromise = requestJson<{ provider: MailProvider; domains: MailDomain[] }>(
     `/api/mail/domains${qs}`,
     { signal },
-  );
+  )
+    .then((data) => {
+      cachedDomainsEntry = {
+        providerKey: key,
+        data,
+        expiresAt: Date.now() + 60_000,
+      };
+      return data;
+    })
+    .finally(() => {
+      inflightDomainRequests.delete(key);
+    });
+
+  inflightDomainRequests.set(key, reqPromise);
+  return reqPromise;
 }
 
 export async function createAndLoginAccount(options?: {

@@ -118,10 +118,20 @@ export function TelegramSyncCard({
               <ExternalLink className="h-3 w-3" />
             </a>
           ) : isConfigured ? (
-            <span className="text-amber-300">Bot connecting…</span>
+            <span
+              className={
+                botStatus?.lastError ? 'text-amber-300' : 'text-amber-200'
+              }
+            >
+              {botStatus?.lastError === 'Unauthorized'
+                ? 'Update TELEGRAM_BOT_TOKEN in .env'
+                : botStatus?.lastError
+                  ? 'Bot offline — check token'
+                  : 'Bot connecting…'}
+            </span>
           ) : (
             <span className="text-slate-400">
-              Set TELEGRAM_BOT_TOKEN in Secrets
+              Set TELEGRAM_BOT_TOKEN in .env
             </span>
           )}
         </div>

@@ -336,7 +336,7 @@ export function ForwardModal({
                     <code className="font-mono-tabular text-sky-200">
                       RESEND_API_KEY
                     </code>{' '}
-                    in Secrets for 1-click background forwarding.
+                    in <code className="font-mono-tabular text-sky-200">.env</code> for 1-click background forwarding.
                   </span>
                 </div>
               )}

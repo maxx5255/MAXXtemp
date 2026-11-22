@@ -87,12 +87,35 @@ function sendUpstreamResult(
   return res.send(result.bodyText);
 }
 
+const DOMAIN_CACHE_TTL_MS = 60_000;
+const DOMAIN_STALE_TTL_MS = 15 * 60_000;
+let serverDomainsCache: {
+  key: string;
+  provider: AllowedProvider;
+  domains: unknown[];
+  expiresAt: number;
+  staleUntil: number;
+} | null = null;
+
 export function createMailRouter() {
   const router = express.Router();
 
   // GET /api/mail/domains?provider=...
   router.get('/domains', async (req: Request, res: Response) => {
     const requested = req.query.provider;
+    const cacheKey = typeof requested === 'string' ? requested : 'auto';
+    const now = Date.now();
+    if (
+      serverDomainsCache &&
+      serverDomainsCache.key === cacheKey &&
+      serverDomainsCache.expiresAt > now
+    ) {
+      return res.json({
+        provider: serverDomainsCache.provider,
+        domains: serverDomainsCache.domains,
+      });
+    }
+
     const providersToTry: AllowedProvider[] = requested
       ? [resolveProvider(requested)]
       : [...ALLOWED_PROVIDERS];
@@ -100,9 +123,13 @@ export function createMailRouter() {
     let lastError = 'Unable to reach mail providers';
     for (const provider of providersToTry) {
       try {
-        const result = await upstreamFetch(`${provider}/domains?page=1`, {
-          headers: { Accept: 'application/ld+json, application/json' },
-        });
+        const result = await upstreamFetch(
+          `${provider}/domains?page=1`,
+          {
+            headers: { Accept: 'application/ld+json, application/json' },
+          },
+          3,
+        );
         if (result.status >= 200 && result.status < 300) {
           const parsed = JSON.parse(result.bodyText || '{}');
           const members = Array.isArray(parsed)
@@ -111,6 +138,13 @@ export function createMailRouter() {
               ? parsed['hydra:member']
               : [];
           if (members.length > 0) {
+            serverDomainsCache = {
+              key: cacheKey,
+              provider,
+              domains: members,
+              expiresAt: Date.now() + DOMAIN_CACHE_TTL_MS,
+              staleUntil: Date.now() + DOMAIN_STALE_TTL_MS,
+            };
             return res.json({
               provider,
               domains: members,
@@ -123,6 +157,17 @@ export function createMailRouter() {
       } catch (err) {
         lastError = err instanceof Error ? err.message : String(err);
       }
+    }
+
+    if (
+      serverDomainsCache &&
+      serverDomainsCache.key === cacheKey &&
+      serverDomainsCache.staleUntil > Date.now()
+    ) {
+      return res.json({
+        provider: serverDomainsCache.provider,
+        domains: serverDomainsCache.domains,
+      });
     }
 
     return res.status(502).json({ error: lastError });
